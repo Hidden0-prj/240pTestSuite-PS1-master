@@ -1,7 +1,44 @@
 CDLIC_FILE = /usr/local/psxsdk/share/licenses/infousa.dat
 
-all: audio tim compress_textures bin2c
-	mkdir binary
+# UPDATED BUILD SYSTEM
+# This Makefile now supports building both standalone .exe and CD images
+# 
+# Usage:
+#   make exe      -> Build 240p_standalone.exe (for emulator/direct loading)
+#   make cd       -> Build CD image (for distribution, original behavior)
+#   make all      -> Build both (default)
+#   make clean    -> Clean all outputs
+
+.PHONY: all exe cd audio tim compress_textures bin2c clean
+
+# Default: build both versions
+all: exe cd
+
+# ========================
+# STANDALONE EXE TARGET
+# ========================
+# For running directly in emulator or on hardware without CD
+exe: audio tim compress_textures bin2c
+	@echo "=========================================="
+	@echo "Building STANDALONE executable"
+	@echo "=========================================="
+	mkdir -p binary
+	psx-gcc  -Wall -O3 -DSTANDALONE -o 240p.elf 240p.c patterns.c tests.c font.c lz4.c textures.c help.c sg_string.c
+	elf2exe 240p.elf 240p.exe
+	@mkdir -p standalone
+	mv 240p.exe standalone/240p_standalone.exe
+	@echo "✓ Standalone executable created: standalone/240p_standalone.exe"
+	rm -f 240p.elf
+
+# ========================
+# CD IMAGE TARGET
+# ========================
+# For creating bootable CD image (original behavior)
+cd: audio tim compress_textures bin2c
+	@echo "=========================================="
+	@echo "Building CD image for emulation"
+	@echo "=========================================="
+	mkdir -p binary
 	psx-gcc  -Wall -O3 -o 240p.elf 240p.c patterns.c tests.c font.c lz4.c textures.c help.c sg_string.c
 	elf2exe 240p.elf 240p.exe
 	cp 240p.exe binary
@@ -9,9 +46,11 @@ all: audio tim compress_textures bin2c
 	mkisofs -o ./binary/240p.hsf -V 240pTestSuite -sysid PLAYSTATION binary
 	cd ./binary && mkpsxiso 240p.hsf 240pTestSuitePS1-EMU.bin $(CDLIC_FILE);
 	rm -f ./binary/240p.hsf
-	rm -f 240p.elf
-	rm -f 240p.exe
-	###################
+	@echo "✓ CD image created: binary/240pTestSuitePS1-EMU.bin"
+	
+	@echo "=========================================="
+	@echo "Building CD image for real hardware"
+	@echo "=========================================="
 	psx-gcc  -Wall -O3 -DREAL_HW -o 240p.elf 240p.c patterns.c tests.c font.c lz4.c textures.c help.c sg_string.c
 	elf2exe 240p.elf 240p.exe
 	cp 240p.exe binary
@@ -21,14 +60,19 @@ all: audio tim compress_textures bin2c
 	rm -f ./binary/240p.hsf
 	rm -f ./binary/240p.exe
 	rm -f ./binary/system.cnf
-	rm -f ./240p.elf
-	rm -f ./240p.exe
+	rm -f 240p.elf
+	rm -f 240p.exe
+	@echo "✓ CD image created: binary/240pTestSuitePS1.bin"
+
+# ========================
+# RESOURCE COMPILATION
+# ========================
 
 audio:
 	./tools/wav2vag.exe ./resources/beep.wav ./resources/beep.raw -raw
 
 tim:
-	mkdir patterns
+	mkdir -p patterns
 	./tools/bmp2tim.exe textures/grid224.bmp patterns/grid224.tim 4 -org=320,0 -noblack -clut=912,480
 	./tools/bmp2tim.exe textures/grid240.bmp patterns/grid240.tim 4 -org=448,0 -noblack -clut=912,481
 	./tools/bmp2tim.exe textures/grid256.bmp patterns/grid256.tim 4 -org=576,0 -noblack -clut=912,482
@@ -171,6 +215,7 @@ bin2c:
 	./tools/bin2c.exe sonicback2 < patterns/sonicback2.lz4 > ./patterns/sonicback2.c
 	./tools/bin2c.exe sonicback3 < patterns/sonicback3.lz4 > ./patterns/sonicback3.c
 	./tools/bin2c.exe sonicback4 < patterns/sonicback4.lz4 > ./patterns/sonicback4.c
+	./tools/lz4compress.exe ./patterns/sonicfloor.tim ./patterns/sonicfloor.lz4
 	./tools/bin2c.exe sonicfloor < patterns/sonicfloor.lz4 > ./patterns/sonicfloor.c
 	./tools/bin2c.exe kiki < patterns/kiki.lz4 > ./patterns/kiki.c
 	./tools/bin2c.exe motoko < patterns/motoko.lz4 > ./patterns/motoko.c
@@ -189,6 +234,10 @@ bin2c:
 	./tools/bin2c.exe convergence < patterns/convergence.lz4> ./patterns/convergence.c
 
 clean:
+	@echo "Cleaning build artifacts..."
 	rm -f ./resources/beep.raw ./resources/beep.h
 	rm -rf binary
+	rm -rf standalone
 	rm -rf patterns
+	rm -f 240p.elf 240p.exe
+	@echo "✓ Clean complete"
