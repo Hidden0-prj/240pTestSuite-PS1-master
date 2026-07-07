@@ -9,36 +9,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # This is the magic line. It pulls a full Linux environment 
-    # that already has psx-gcc, mkisofs, and PS1 libraries installed.
-    container:
-      image: ghcr.io/lameguy64/psn00bsdk:latest 
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Extra Host Dependencies
+      - name: Build PS1 Project in PSXSDK Container
         run: |
-          # The container is based on Arch Linux, so we use pacman
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm base-devel zip
-
-      - name: Compile Custom Tools
-        run: |
-          cd tools
-          make
-          # Sometimes Linux makefiles don't output .exe extensions. 
-          # We copy them to ensure the root Makefile finds what it's looking for.
-          cp bmp2tim bmp2tim.exe || true
-          cp bin2c bin2c.exe || true
-          cp lz4compress lz4compress.exe || true
-          cp wav2vag wav2vag.exe || true
-
-      - name: Compile PS1 Project
-        run: |
-          # Run the main Makefile you provided
-          make
+          # This command downloads the official PSXSDK Docker image, mounts your code, 
+          # and runs a mini-script inside it to compile everything.
+          docker run --rm -v "${{ github.workspace }}:/build" -w /build root670/docker-psxsdk sh -c '
+            # 1. Install standard build tools needed to compile the "tools" folder
+            apk update && apk add build-base
+            
+            # 2. Navigate to tools and compile them inside the container
+            cd tools
+            make
+            
+            # 3. Copy the compiled binaries to .exe extensions since the main Makefile expects them
+            cp bmp2tim bmp2tim.exe || true
+            cp bin2c bin2c.exe || true
+            cp lz4compress lz4compress.exe || true
+            cp wav2vag wav2vag.exe || true
+            
+            # 4. Return to root and compile the PS1 project using psx-gcc
+            cd ..
+            make
+          '
 
       - name: Upload Standalone Executable and Disc Images
         uses: actions/upload-artifact@v4
@@ -48,5 +44,7 @@ jobs:
             binary/*.exe
             binary/*.bin
             binary/*.cue
-            binary/*.iso
+            binary/*.hsf
+            *.exe
+            *.elf
           if-no-files-found: warn
