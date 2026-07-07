@@ -3,39 +3,41 @@ name: PS1 240p Test Suite Build
 on:
   push:
     branches: [ "master", "main" ]
-  pull_request:
-    branches: [ "master", "main" ]
-  workflow_dispatch: # Allows you to trigger a build manually from the GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    # IMPORTANT: If your modified code strictly relies on the original Psy-Q SDK 
-    # or PSn00bSDK, uncomment the container lines below to run the build inside a 
-    # pre-configured PS1 Docker environment rather than standard Ubuntu.
-    # container:
-    #   image: ghcr.io/lameguy64/psn00bsdk:latest 
+    
+    # This is the magic line. It pulls a full Linux environment 
+    # that already has psx-gcc, mkisofs, and PS1 libraries installed.
+    container:
+      image: ghcr.io/lameguy64/psn00bsdk:latest 
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Host Build Dependencies
+      - name: Install Extra Host Dependencies
         run: |
-          sudo apt-get update
-          # 'build-essential' is required to compile the custom C files inside your 'tools' directory (like elf2exe)
-          # 'gcc-mipsel-linux-gnu' provides the open-source cross-compiler for the PS1's MIPS architecture
-          sudo apt-get install -y build-essential gcc-mipsel-linux-gnu make zip
+          # The container is based on Arch Linux, so we use pacman
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel zip
 
       - name: Compile Custom Tools
         run: |
           cd tools
           make
+          # Sometimes Linux makefiles don't output .exe extensions. 
+          # We copy them to ensure the root Makefile finds what it's looking for.
+          cp bmp2tim bmp2tim.exe || true
+          cp bin2c bin2c.exe || true
+          cp lz4compress lz4compress.exe || true
+          cp wav2vag wav2vag.exe || true
 
       - name: Compile PS1 Project
         run: |
-          # This runs your root Makefile to compile the 240p source code
+          # Run the main Makefile you provided
           make
 
       - name: Upload Standalone Executable and Disc Images
@@ -43,8 +45,8 @@ jobs:
         with:
           name: 240p-TestSuite-Builds
           path: |
-            *.exe
-            *.bin
-            *.cue
-            *.iso
+            binary/*.exe
+            binary/*.bin
+            binary/*.cue
+            binary/*.iso
           if-no-files-found: warn
