@@ -15,23 +15,22 @@ jobs:
 
       - name: Build PS1 Project in PSXSDK Container
         run: |
-          # This command downloads the official PSXSDK Docker image, mounts your code, 
-          # and runs a mini-script inside it to compile everything.
           docker run --rm -v "${{ github.workspace }}:/build" -w /build root670/docker-psxsdk sh -c '
-            # 1. Install standard build tools needed to compile the "tools" folder
-            apk update && apk add build-base
+            # 1. Install standard C compiler for the host tools (handling both Debian and Alpine bases)
+            if ! command -v gcc &> /dev/null; then
+              apk update && apk add build-base || (apt-get update && apt-get install -y build-essential)
+            fi
             
-            # 2. Navigate to tools and compile them inside the container
+            # 2. Bypass the broken Makefile and compile ONLY the exactly required tools directly
+            echo "Compiling custom 240p host tools..."
             cd tools
-            make
+            gcc bmp2tim.c -o bmp2tim.exe
+            gcc bin2c.c -o bin2c.exe
+            gcc wav2vag.c -o wav2vag.exe
+            gcc lz4*.c -o lz4compress.exe
             
-            # 3. Copy the compiled binaries to .exe extensions since the main Makefile expects them
-            cp bmp2tim bmp2tim.exe || true
-            cp bin2c bin2c.exe || true
-            cp lz4compress lz4compress.exe || true
-            cp wav2vag wav2vag.exe || true
-            
-            # 4. Return to root and compile the PS1 project using psx-gcc
+            # 3. Return to root and compile the PS1 project
+            echo "Compiling PS1 Game..."
             cd ..
             make
           '
