@@ -1,0 +1,50 @@
+name: PS1 240p Test Suite Build
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch: # Allows you to trigger a build manually from the GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # IMPORTANT: If your modified code strictly relies on the original Psy-Q SDK 
+    # or PSn00bSDK, uncomment the container lines below to run the build inside a 
+    # pre-configured PS1 Docker environment rather than standard Ubuntu.
+    # container:
+    #   image: ghcr.io/lameguy64/psn00bsdk:latest 
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Host Build Dependencies
+        run: |
+          sudo apt-get update
+          # 'build-essential' is required to compile the custom C files inside your 'tools' directory (like elf2exe)
+          # 'gcc-mipsel-linux-gnu' provides the open-source cross-compiler for the PS1's MIPS architecture
+          sudo apt-get install -y build-essential gcc-mipsel-linux-gnu make zip
+
+      - name: Compile Custom Tools
+        run: |
+          cd tools
+          make
+
+      - name: Compile PS1 Project
+        run: |
+          # This runs your root Makefile to compile the 240p source code
+          make
+
+      - name: Upload Standalone Executable and Disc Images
+        uses: actions/upload-artifact@v4
+        with:
+          name: 240p-TestSuite-Builds
+          path: |
+            *.exe
+            *.bin
+            *.cue
+            *.iso
+          if-no-files-found: warn
