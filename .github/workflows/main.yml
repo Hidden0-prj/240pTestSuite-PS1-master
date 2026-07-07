@@ -1,49 +1,59 @@
-name: PS1 240p Test Suite Build
+name: Build PS1 240p Test Suite
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build PS1 Project in PSXSDK Container
+      - name: Build with PSXSDK (Docker)
+        # root670/docker-psxsdk (Alpine/musl-based) bundles psx-gcc, elf2exe,
+        # systemcnf, mkisofs and mkpsxiso, which is exactly what this
+        # Makefile needs.
+        #
+        # This repo doesn't check in top-level textures/, resources/, or
+        # tools/ folders -- they're bundled inside 240pTestSuite-PS1-master.zip
+        # instead. The .exe files in there are prebuilt Windows binaries, so
+        # rather than use them we rebuild the 4 needed host-side tools from
+        # their bundled C sources. That compile step -- and the unzip -- has
+        # to happen *inside* this same Alpine container (not on the Ubuntu
+        # runner), otherwise the resulting binaries are glibc-linked and
+        # fail with "Command not found" when this musl-based image tries to
+        # exec them.
         run: |
-          docker run --rm -v "${{ github.workspace }}:/build" -w /build root670/docker-psxsdk sh -c '
-            # 1. Install standard C compiler for the host tools (handling both Debian and Alpine bases)
-            if ! command -v gcc &> /dev/null; then
-              apk update && apk add build-base || (apt-get update && apt-get install -y build-essential)
-            fi
-            
-            # 2. Bypass the broken Makefile and compile ONLY the exactly required tools directly
-            echo "Compiling custom 240p host tools..."
-            cd tools
-            gcc bmp2tim.c -o bmp2tim.exe
-            gcc bin2c.c -o bin2c.exe
-            gcc wav2vag.c -o wav2vag.exe
-            gcc lz4*.c -o lz4compress.exe
-            
-            # 3. Return to root and compile the PS1 project
-            echo "Compiling PS1 Game..."
-            cd ..
+          docker run --rm -v "$PWD:/build" -w /build root670/docker-psxsdk sh -c '
+            set -e
+            apk add --no-cache unzip gcc musl-dev >/dev/null
+            unzip -o 240pTestSuite-PS1-master.zip -d _bundled
+            mkdir -p textures resources tools
+            cp _bundled/textures/*.bmp textures/
+            cp _bundled/resources/beep.wav resources/
+            gcc -O2 -o tools/bin2c.exe        _bundled/tools/bin2c.c
+            gcc -O2 -o tools/bmp2tim.exe      _bundled/tools/bmp2tim.c
+            gcc -O2 -o tools/wav2vag.exe      _bundled/tools/wav2vag.c -lm
+            gcc -O2 -o tools/lz4compress.exe  _bundled/tools/lz4compress.c lz4.c lz4hc.c
+            chmod +x tools/*.exe
             make
           '
 
-      - name: Upload Standalone Executable and Disc Images
+      - name: Show build output
+        run: ls -laR binary
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: 240p-TestSuite-Builds
+          name: 240pTestSuite-PS1
           path: |
-            binary/*.exe
             binary/*.bin
             binary/*.cue
-            binary/*.hsf
-            *.exe
-            *.elf
+            binary/*.exe
           if-no-files-found: warn
