@@ -248,7 +248,18 @@ void video_options()
 
 int main()
 {
+	/*
+	 * MODIFICATION FOR STANDALONE EXE:
+	 * PSX_Init() attempts to initialize the CD-ROM subsystem.
+	 * When compiling with -DSTANDALONE, we skip it to allow the .exe
+	 * to run without a disc or CD filesystem present.
+	 * 
+	 * For CD builds (REAL_HW), full PSX_Init() is still recommended.
+	 */
+#ifndef STANDALONE
 	PSX_Init();
+#endif
+	
 	GsInit();
 	SsInit();
 	GsSetList(prim_list);
