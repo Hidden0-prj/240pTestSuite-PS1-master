@@ -1,34 +1,17 @@
 name: Build PS1 240p Test Suite
-
 on:
   push:
     branches: [ "**" ]
   pull_request:
     branches: [ "**" ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Build with PSXSDK (Docker)
-        # root670/docker-psxsdk (Alpine/musl-based) bundles psx-gcc, elf2exe,
-        # systemcnf, mkisofs and mkpsxiso, which is exactly what this
-        # Makefile needs.
-        #
-        # This repo doesn't check in top-level textures/, resources/, or
-        # tools/ folders -- they're bundled inside 240pTestSuite-PS1-master.zip
-        # instead. The .exe files in there are prebuilt Windows binaries, so
-        # rather than use them we rebuild the 4 needed host-side tools from
-        # their bundled C sources. That compile step -- and the unzip -- has
-        # to happen *inside* this same Alpine container (not on the Ubuntu
-        # runner), otherwise the resulting binaries are glibc-linked and
-        # fail with "Command not found" when this musl-based image tries to
-        # exec them.
         run: |
           docker run --rm -v "$PWD:/build" -w /build root670/docker-psxsdk sh -c '
             set -e
@@ -44,16 +27,13 @@ jobs:
             chmod +x tools/*.exe
             make
           '
-
       - name: Show build output
-        run: ls -laR binary
-
+        run: ls -laR binary standalone
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: 240pTestSuite-PS1
           path: |
-            binary/*.bin
-            binary/*.cue
-            binary/*.exe
+            binary/
+            standalone/
           if-no-files-found: warn
